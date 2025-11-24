@@ -1,53 +1,56 @@
-#云编译公用核心
+# 云编译公用核心
+# 此工作流是整个OpenWRT-CI2项目的核心构建工作流，被其他工作流通过workflow_call调用
 name: WRT-CORE
 
 on:
   workflow_call:
+    # 定义工作流调用时需要传入的参数
     inputs:
-      WRT_CONFIG:
+      WRT_CONFIG:          # 配置文件名称
         required: true
         type: string
-      WRT_THEME:
+      WRT_THEME:           # Web界面主题
         required: true
         type: string
-      WRT_NAME:
+      WRT_NAME:            # 固件名称
         required: true
         type: string
-      WRT_SSID:
+      WRT_SSID:            # WiFi名称
         required: true
         type: string
-      WRT_WORD:
+      WRT_WORD:            # WiFi密码
         required: true
         type: string
-      WRT_IP:
+      WRT_IP:              # 管理IP地址
         required: true
         type: string
-      WRT_PW:
+      WRT_PW:              # 登录密码
         required: true
         type: string
-      WRT_REPO:
+      WRT_REPO:            # 源代码仓库
         required: true
         type: string
-      WRT_BRANCH:
+      WRT_BRANCH:          # 分支名称
         required: true
         type: string
-      WRT_SOURCE:
+      WRT_SOURCE:          # 源码来源（可选）
         required: false
         type: string
-      WRT_PACKAGE:
+      WRT_PACKAGE:         # 软件包选项（可选）
         required: false
         type: string
-      WRT_TEST:
+      WRT_TEST:            # 是否测试模式（可选）
         required: false
         type: string
-      CI_NAME:
+      CI_NAME:             # CI名称标识（可选）
         required: false
         type: string
-      WRT_ARCH:
+      WRT_ARCH:            # 架构信息（可选）
         required: false
         type: string
+# 设置环境变量，将输入参数传递给后续步骤使用
 env:
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}  # GitHub Actions认证令牌
   WRT_CONFIG: ${{inputs.WRT_CONFIG}}
   WRT_THEME: ${{inputs.WRT_THEME}}
   WRT_NAME: ${{inputs.WRT_NAME}}
@@ -59,21 +62,23 @@ env:
   WRT_BRANCH: ${{inputs.WRT_BRANCH}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
-  WRT_DIR: 'wrt'
+  WRT_DIR: 'wrt'         # 构建目录名称
   CI_NAME: ${{inputs.CI_NAME}}
   WRT_ARCH: ${{inputs.WRT_ARCH}}
 
 jobs:
   core:
-    name: ${{inputs.WRT_SOURCE}}
-    runs-on: ubuntu-24.04
+    name: ${{inputs.WRT_SOURCE}}  # 任务名称显示源码来源
+    runs-on: ubuntu-24.04         # 在Ubuntu 24.04环境运行
     steps:
+      # 安装BC工具（二进制计算器，编译时需要）
       - name: Install BC
         env:
-          DEBIAN_FRONTEND: noninteractive
+          DEBIAN_FRONTEND: noninteractive  # 非交互式安装
         run: |
           sudo -E apt -yqq install bc
 
+      # 释放磁盘空间，删除不必要的软件包和工具
       - name: Free Disk Space
         uses: endersonmenezes/free-disk-space@v2
         with:
@@ -87,8 +92,11 @@ jobs:
           remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/share/glade* /usr/local/share/chromium /usr/local/share/powershell"
           testing: false
 
+      # 检出当前仓库代码
       - name: Checkout Projects
         uses: actions/checkout@main
+        
+      # 初始化构建环境
       - name: Initialization Environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -100,39 +108,48 @@ jobs:
           sudo -E apt -yqq autoclean
           sudo -E apt -yqq clean
           sudo -E apt -yqq install dos2unix libfuse-dev
+          # 执行环境初始化脚本，安装必要的编译依赖
           sudo bash $GITHUB_WORKSPACE/Scripts/init_build_environment.sh
           sudo -E systemctl daemon-reload
-          sudo -E timedatectl set-timezone "Asia/Shanghai"
-#          sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
-#          sudo mkdir -p /mnt/build_wrt
-#          sudo chown $USER:$USER /mnt/build_wrt
-#          sudo ln -s /mnt/build_wrt $GITHUB_WORKSPACE/wrt
+          sudo -E timedatectl set-timezone "Asia/Shanghai"  # 设置时区为上海
 
+      # 初始化构建所需的各种变量
       - name: Initialization Values
         run: |
+          # 设置日期时间戳
           echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          # 设置仓库所有者标识
           echo "WRT_MARK=$(echo $GITHUB_REPOSITORY | cut -d '/' -f 1)" >> $GITHUB_ENV
+          # 设置版本信息
           echo "WRT_VER=$(echo $WRT_REPO | cut -d '/' -f 4)-$WRT_BRANCH" >> $GITHUB_ENV
+          # 从配置文件中提取目标平台
           echo "WRT_TARGET=$(grep -m 1 -oP '^CONFIG_TARGET_\K[\w]+(?=\=y)' ./Config/$WRT_CONFIG.txt | tr '[:lower:]' '[:upper:]')" >> $GITHUB_ENV
+          # 初始化内核版本和插件列表变量
           echo "WRT_KVER=none" >> $GITHUB_ENV
           echo "WRT_LIST=none" >> $GITHUB_ENV
 
           echo "WRT_CI=$WRT_CI" >> $GITHUB_ENV
+          # 如果未指定架构，则从配置文件中提取
           [[ -z $WRT_ARCH ]] && {
             export WRT_ARCH=$(sed -n 's/.*_DEVICE_\(.*\)_DEVICE_.*/\1/p' $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt | head -n 1)
             echo "WRT_ARCH=$WRT_ARCH" >> $GITHUB_ENV
           }
+          # 保存仓库信息用于缓存标识
           echo "$WRT_REPO/$WRT_BRANCH" > "$GITHUB_WORKSPACE/repo_flag"
+          
+      # 克隆OpenWrt源码
       - name: Clone Code
         run: |
           git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
-
+          # 记录源码最新提交的哈希值
           cd ./wrt/ && echo "WRT_HASH=$(git log -1 --pretty=format:'%h')" >> $GITHUB_ENV
 
+      # 检查并转换脚本文件格式，确保可执行权限
       - name: Check Scripts
         run: |
           find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
+      # 缓存编译依赖以加快后续构建
       - name: Cache Dependencies
         uses: actions/cache@v4
         with:
@@ -143,6 +160,7 @@ jobs:
           restore-keys: |
             ${{ env.WRT_ARCH }}-${{ hashFiles('**/repo_flag') }}-
 
+      # 刷新缓存时间戳，避免缓存失效
       - name: Refresh the cache
         run: |
           if [ -d "./wrt/staging_dir" ]; then
@@ -151,94 +169,108 @@ jobs:
             done
           fi            
 
-
-
+      # 更新软件包源并安装
       - name: Update Feeds
         run: |
           cd ./wrt/
-
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      # 添加自定义软件包
       - name: Custom Packages
         run: |
           cd ./wrt/package/
-
+          # 执行软件包安装脚本
           $GITHUB_WORKSPACE/Scripts/Packages.sh
+          # 执行软件包处理脚本
           $GITHUB_WORKSPACE/Scripts/Handles.sh
 
+      # 应用自定义配置
       - name: Custom Settings
         run: |
+          # 加载功能函数库
           . $GITHUB_WORKSPACE/Scripts/function.sh
           cd ./wrt/
-          
+          # 生成配置文件
           generate_config && cat .config
-          
+          # 应用自定义设置
           $GITHUB_WORKSPACE/Scripts/Settings.sh
-
+          # 生成默认配置并清理
           make defconfig -j$(nproc) && make clean -j$(nproc)
 
+      # 下载编译所需的软件包（非测试模式）
       - name: Download Packages
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
-
           make download -j$(nproc)
 
+      # 编译固件（非测试模式）
       - name: Compile Firmware
         if: env.WRT_TEST != 'true'
         run: |
           cd ./wrt/
-
+          # 尝试并行编译，如果失败则使用单线程详细输出调试
           make -j$(nproc) || make -j1 V=s
 
+      # 删除旧缓存，避免存储空间浪费
       - name: Delete Old Cache
         run: |
           # 获取缓存列表并删除
           gh cache list --key ${{ env.WRT_ARCH }}-${{ hashFiles('**/repo_flag') }}- --json key --jq '.[] | .key' | while read -r key; do
             gh cache delete "$key"
           done
-          # 输出缓存状态
+          # 输出缓存状态信息
           echo "========cache status========"
           echo "ccache: $(du -sh ./wrt/.ccache | cut -f 1)"
           echo "staging: $(du -sh ./wrt/staging_dir | cut -f 1)"
 
+      # 输出机器信息，用于调试和性能分析
       - name: Machine Information
         run: |
           cd ./wrt/
+          echo "======================="
+          lscpu | grep -E "name|Core|Thread"  # 显示CPU信息
+          echo "======================="
+          df -h  # 显示磁盘使用情况
+          echo "======================="
+          du -h --max-depth=1  # 显示目录大小
+          echo "======================="
 
-          echo "======================="
-          lscpu | grep -E "name|Core|Thread"
-          echo "======================="
-          df -h
-          echo "======================="
-          du -h --max-depth=1
-          echo "======================="
-
+      # 打包固件文件
       - name: Package Firmware
         run: |
-          cd ./wrt/ && mkdir ./upload/
-
+          cd ./wrt/ && mkdir ./upload/  # 创建上传目录
+          
+          # 保存配置文件副本
           cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_VER"-"$WRT_DATE".txt
-
+          
+          # 非测试模式下的固件处理
           if [[ $WRT_TEST != 'true' ]]; then
+            # 获取内核版本
             echo "WRT_KVER=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^kernel - \K[\d\.]+' {} \;)" >> $GITHUB_ENV
+            # 获取插件列表
             echo "WRT_LIST=$(find ./bin/targets/ -type f -name "*.manifest" -exec grep -oP '^luci-(app|theme)[^ ]*' {} \; | tr '\n' ' ')" >> $GITHUB_ENV
-
+            
+            # 删除不需要的文件
             find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
-
+            
+            # 重命名固件文件，添加版本和日期信息
             for FILE in $(find ./bin/targets/ -type f -iname "*$WRT_TARGET*") ; do
               EXT=$(basename $FILE | cut -d '.' -f 2-)
               NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
               NEW_FILE="$WRT_VER"-"$NAME"-"$WRT_DATE"."$EXT"
               mv -f $FILE ./upload/$NEW_FILE
             done
-
+            
+            # 移动所有固件文件到上传目录
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
-
+            
+            # 清理编译临时文件
             make clean -j$(nproc)
           fi
 
+      # 发布固件到GitHub Releases
       - name: Release Firmware
         uses: softprops/action-gh-release@v2
         with:
