@@ -2,36 +2,59 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
 # Copyright (C) ImmortalWrt.org
+# =====================================
+# 构建环境初始化脚本(init_build_environment.sh)
+# 此脚本用于初始化OpenWrt/immortalwrt的编译环境
+# 包括检查系统环境、网络连接、更新软件源和安装依赖
+# =====================================
 
-DEFAULT_COLOR="\033[0m"
-BLUE_COLOR="\033[36m"
-GREEN_COLOR="\033[32m"
-RED_COLOR="\033[31m"
-YELLOW_COLOR="\033[33m"
+# ========== 颜色定义 ==========
+# 用于终端输出的颜色设置
+DEFAULT_COLOR="\033[0m"  # 默认颜色
+BLUE_COLOR="\033[36m"    # 蓝色 - 信息消息
+GREEN_COLOR="\033[32m"   # 绿色 - 成功消息
+RED_COLOR="\033[31m"     # 红色 - 错误消息
+YELLOW_COLOR="\033[33m"  # 黄色 - 警告消息
 
+# ========== 消息输出函数 ==========
+
+# 函数: __error_msg
+# 用途: 输出错误消息（红色）
 function __error_msg() {
 	echo -e "${RED_COLOR}[ERROR]${DEFAULT_COLOR} $*"
 }
 
+# 函数: __info_msg
+# 用途: 输出信息消息（蓝色）
 function __info_msg() {
 	echo -e "${BLUE_COLOR}[INFO]${DEFAULT_COLOR} $*"
 }
 
+# 函数: __success_msg
+# 用途: 输出成功消息（绿色）
 function __success_msg() {
 	echo -e "${GREEN_COLOR}[SUCCESS]${DEFAULT_COLOR} $*"
 }
 
+# 函数: __warning_msg
+# 用途: 输出警告消息（黄色）
 function __warning_msg() {
 	echo -e "${YELLOW_COLOR}[WARNING]${DEFAULT_COLOR} $*"
 }
 
+# ========== 系统检查 ==========
+
+# 函数: check_system
+# 用途: 检查系统版本、架构和用户权限
 function check_system() {
 	__info_msg "Checking system info..."
 
+	# 获取系统版本代号
 	VERSION_CODENAME="$(source /etc/os-release; echo "$VERSION_CODENAME")"
 
+	# 根据不同的系统版本设置相应的编译参数
 	case "$VERSION_CODENAME" in
-	"bionic")
+	"bionic")  # Ubuntu 18.04
 		GCC_VERSION="9"
 		NODE_DISTRO="$VERSION_CODENAME"
 		NODE_KEY="nodesource.gpg.key"
@@ -39,7 +62,7 @@ function check_system() {
 		UBUNTU_CODENAME="$VERSION_CODENAME"
 		VERSION_PACKAGE="lib32gcc-s1 libpython3.6-dev python2.7 python3.6"
 		;;
-	"buster")
+	"buster")  # Debian 10
 		BPO_FLAG="-t $VERSION_CODENAME-backports"
 		DISTRO_PREFIX="debian-archive/"
 		DISTRO_SECUTIRY_PATH="buster/updates"
@@ -48,56 +71,78 @@ function check_system() {
 		VERSION_PACKAGE="lib32gcc1 python2"
 		;;
 	"focal"|\
-	"jammy")
+	"jammy")  # Ubuntu 20.04 / 22.04
 		GCC_VERSION="9"
 		UBUNTU_CODENAME="$VERSION_CODENAME"
 		VERSION_PACKAGE="lib32gcc-s1 python2"
 		;;
-	"bullseye")
+	"bullseye")  # Debian 11
 		BPO_FLAG="-t $VERSION_CODENAME-backports"
 		GCC_VERSION="9"
 		UBUNTU_CODENAME="focal"
 		VERSION_PACKAGE="lib32gcc-s1 python2"
 		;;
-	"bookworm")
+	"bookworm")  # Debian 12
 		BPO_FLAG="-t $VERSION_CODENAME-backports"
 		GCC_VERSION="12"
 		UBUNTU_CODENAME="jammy"
 		VERSION_PACKAGE="lib32gcc-s1"
 		;;
-	"noble")
+	"noble")  # Ubuntu 24.04
 		GCC_VERSION="12"
 		UBUNTU_CODENAME="$VERSION_CODENAME"
 		VERSION_PACKAGE="lib32gcc-s1"
 		;;
 	*)
+		# 不支持的操作系统
 		__error_msg "Unsupported OS, use Ubuntu 20.04 instead."
 		exit 1
 		;;
 	esac
 
+	# 检查架构 - 只支持x86_64
 	[ "$(uname -m)" == "x86_64" ] || { __error_msg "Unsupported architecture, use AMD64 instead." && exit 1; }
 
+	# 检查用户权限 - 必须以root用户运行
 	[ "$(whoami)" == "root" ] || { __error_msg "You must run this script as root." && exit 1; }
 }
 
+# ========== 网络检查 ==========
+
+# 函数: check_network
+# 用途: 检查网络连接并判断是否为中国网络环境
 function check_network() {
 	__info_msg "Checking network..."
 
+	# 检测是否在中国网络环境
 	curl -s "myip.ipip.net" | grep -qo "中国" && CHN_NET=1
+	
+	# 检查基本网络连接
+	# 尝试访问百度和谷歌，确保网络连接正常
 	curl --connect-timeout 10 "baidu.com" > "/dev/null" 2>&1 || { __warning_msg "Your network is not suitable for compiling OpenWrt!"; }
 	curl --connect-timeout 10 "google.com" > "/dev/null" 2>&1 || { __warning_msg "Your network is not suitable for compiling OpenWrt!"; }
 }
 
+# ========== 更新软件源 ==========
+
+# 函数: update_apt_source
+# 用途: 更新软件源并配置第三方仓库
 function update_apt_source() {
 	__info_msg "Updating apt source lists..."
-	set -x
+	set -x  # 显示命令执行过程
 
+	# 初始更新并安装HTTPS支持
 	apt update -y
 	apt install -y apt-transport-https gnupg2
+	
+	# 中国网络环境使用国内镜像源
 	if [ -n "$CHN_NET" ]; then
+		# 备份原始源列表
 		mv "/etc/apt/sources.list" "/etc/apt/sources.list.bak"
+		
+		# 根据系统类型配置华为云镜像源
 		if [ "$VERSION_CODENAME" == "$UBUNTU_CODENAME" ]; then
+			# Ubuntu系统
 			cat <<-EOF >"/etc/apt/sources.list"
 				deb https://repo.huaweicloud.com/ubuntu/ $VERSION_CODENAME main restricted universe multiverse
 				deb-src https://repo.huaweicloud.com/ubuntu/ $VERSION_CODENAME main restricted universe multiverse
@@ -115,6 +160,7 @@ function update_apt_source() {
 				deb-src https://repo.huaweicloud.com/ubuntu/ $VERSION_CODENAME-backports main restricted universe multiverse
 			EOF
 		else
+			# Debian系统
 			cat <<-EOF > "/etc/apt/sources.list"
 				deb https://repo.huaweicloud.com/${DISTRO_PREFIX}debian/ $VERSION_CODENAME main contrib
 				deb-src https://repo.huaweicloud.com/${DISTRO_PREFIX}debian/ $VERSION_CODENAME main contrib
@@ -131,20 +177,24 @@ function update_apt_source() {
 		fi
 	fi
 
+	# 创建必要的目录结构
 	mkdir -p "/etc/apt/keyrings"
 	mkdir -p "/etc/apt/sources.list.d"
 	mkdir -p "/etc/apt/trusted.gpg.d"
 
+	# 配置Node.js仓库
 	cat <<-EOF >"/etc/apt/sources.list.d/nodesource.list"
 		deb https://deb.nodesource.com/node_${NODE_VERSION:-20}.x ${NODE_DISTRO:-nodistro} main
 	EOF
 	curl -fsL "https://deb.nodesource.com/gpgkey/${NODE_KEY:-nodesource-repo.gpg.key}" -o "/etc/apt/trusted.gpg.d/nodesource.asc"
 
+	# 配置Yarn仓库
 	cat <<-EOF >"/etc/apt/sources.list.d/yarn.list"
 		deb https://dl.yarnpkg.com/debian/ stable main
 	EOF
 	curl -fsL "https://dl.yarnpkg.com/debian/pubkey.gpg" -o "/etc/apt/trusted.gpg.d/yarn.asc"
 
+	# 配置GCC工具链仓库（仅Ubuntu 18.04）
 	if [ "$VERSION_CODENAME" == "bionic" ]; then
 		cat <<-EOF >"/etc/apt/sources.list.d/gcc-toolchain.list"
 			deb https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu $UBUNTU_CODENAME main
@@ -153,43 +203,54 @@ function update_apt_source() {
 		curl -fsL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1e9377a2ba9ef27f" -o "/etc/apt/trusted.gpg.d/gcc-toolchain.asc"
 	fi
 
+	# 配置Git仓库
 	cat <<-EOF >"/etc/apt/sources.list.d/git-core-ubuntu-ppa.list"
 		deb https://ppa.launchpadcontent.net/git-core/ppa/ubuntu $UBUNTU_CODENAME main
 		deb-src https://ppa.launchpadcontent.net/git-core/ppa/ubuntu $UBUNTU_CODENAME main
 	EOF
 	curl -fsL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xe1dd270288b4e6030699e45fa1715d88e1df1f24" -o "/etc/apt/trusted.gpg.d/git-core-ubuntu-ppa.asc"
 
+	# 配置LLVM/Clang仓库
 	cat <<-EOF >"/etc/apt/sources.list.d/llvm-toolchain.list"
 		deb https://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-19 main
 		deb-src https://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-19 main
 	EOF
 	curl -fsL "https://apt.llvm.org/llvm-snapshot.gpg.key" -o "/etc/apt/trusted.gpg.d/llvm-toolchain.asc"
 
+	# 配置Go语言仓库
 	cat <<-EOF >"/etc/apt/sources.list.d/longsleep-ubuntu-golang-backports-$UBUNTU_CODENAME.list"
 		deb https://ppa.launchpadcontent.net/longsleep/golang-backports/ubuntu $UBUNTU_CODENAME main
 		deb-src https://ppa.launchpadcontent.net/longsleep/golang-backports/ubuntu $UBUNTU_CODENAME main
 	EOF
 	curl -fsL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x52b59b1571a79dbc054901c0f6bc817356a3d45e" -o "/etc/apt/trusted.gpg.d/longsleep-ubuntu-golang-backports-$UBUNTU_CODENAME.asc"
 
+	# 配置GitHub CLI仓库
 	cat <<-EOF >"/etc/apt/sources.list.d/github-cli.list"
 		deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main
 	EOF
 	curl -fsL "https://cli.github.com/packages/githubcli-archive-keyring.gpg" -o "/etc/apt/keyrings/githubcli-archive-keyring.gpg"
 
+	# 中国网络环境使用镜像源
 	if [ -n "$CHN_NET" ]; then
+		# LLVM源替换为清华镜像
 		sed -i -e "s,apt.llvm.org,mirrors.tuna.tsinghua.edu.cn/llvm-apt,g" -e "s,^deb-src,# deb-src,g" "/etc/apt/sources.list.d/llvm-toolchain.list"
+		# Launchpad源替换为中科大镜像
 		sed -i "s,ppa.launchpadcontent.net,launchpad.proxy.ustclug.org,g" "/etc/apt/sources.list.d"/*
 	fi
 
+	# 更新软件源
 	apt update -y $BPO_FLAG
 
-	set +x
+	set +x  # 关闭命令执行显示
 }
 function install_dependencies() {
 	__info_msg "Installing dependencies..."
-	set -x
+	set -x  # 显示命令执行过程
 
+	# 系统完全更新
 	apt full-upgrade -y $BPO_FLAG
+	
+	# 安装基础编译依赖包
 	apt install -y $BPO_FLAG ack antlr3 asciidoc autoconf automake autopoint binutils bison \
 		build-essential bzip2 ccache cmake cpio curl device-tree-compiler ecj fakeroot \
 		fastjar flex gawk gettext genisoimage git gnutls-dev gperf haveged help2man \
@@ -201,52 +262,68 @@ function install_dependencies() {
 		sharutils squashfs-tools subversion swig texinfo uglifyjs unzip vim wget xmlto \
 		zlib1g-dev zstd xxd $VERSION_PACKAGE
 
-	# fix broken http2 support for curl on buster
-	if [ "$VERSION_CODENAME" == "buster"]; then
+	# 修复Debian 10上curl的http2支持问题
+	if [ "$VERSION_CODENAME" == "buster" ]; then
 		apt full-upgrade -y
 		apt reinstall -y libcurl3-gnutls/buster
 	fi
 
+	# 中国网络环境配置pip源
 	if [ -n "$CHN_NET" ]; then
 		pip3 config set global.index-url "https://mirrors.aliyun.com/pypi/simple/"
 		pip3 config set install.trusted-host "https://mirrors.aliyun.com"
 	fi
 
+	# 安装并配置GCC编译器
 	apt install -y $BPO_FLAG "gcc-$GCC_VERSION" "g++-$GCC_VERSION" "gcc-$GCC_VERSION-multilib" "g++-$GCC_VERSION-multilib"
+	# 创建GCC相关工具的符号链接
 	for i in "gcc-$GCC_VERSION" "g++-$GCC_VERSION" "gcc-ar-$GCC_VERSION" "gcc-nm-$GCC_VERSION" "gcc-ranlib-$GCC_VERSION"; do
 		ln -svf "$i" "/usr/bin/${i%-$GCC_VERSION}"
 	done
 	ln -svf "/usr/bin/g++" "/usr/bin/c++"
+	# 创建asm头文件目录的符号链接
 	[ -e "/usr/include/asm" ] || ln -svf "/usr/include/$(gcc -dumpmachine)/asm" "/usr/include/asm"
 
+	# 安装并配置Clang编译器
 	apt install -y $BPO_FLAG clang-19 libclang-19-dev lld-19 liblld-19-dev
+	# 创建Clang相关工具的符号链接
 	for i in "clang-19" "clang++-19" "clang-cpp-19" "ld.lld-19" "ld64.lld-19" "llc-19" "lld-19" "lld-link-19" "opt-19" "wasm-ld-19"; do
 		ln -svf "$i" "/usr/bin/${i%-19}"
 	done
 
+	# 安装并配置LLVM工具链
 	apt install -y $BPO_FLAG llvm-19
+	# 创建LLVM相关工具的符号链接
 	for i in "/usr/bin"/llvm-*-19; do
 		ln -svf "$i" "${i%-19}"
 	done
 
+	# 安装并配置Node.js和Yarn
 	apt install -y $BPO_FLAG nodejs yarn
+	# 中国网络环境配置npm和yarn源
 	if [ -n "$CHN_NET" ]; then
 		npm config set registry "https://registry.npmmirror.com" --global
 		yarn config set registry "https://registry.npmmirror.com" --global
 	fi
 
+	# 安装并配置Go语言
 	apt install -y $BPO_FLAG golang-1.25-go
+	# 移除旧的Go符号链接并创建新的
 	rm -rf "/usr/bin/go" "/usr/bin/gofmt"
 	ln -svf "/usr/lib/go-1.25/bin/go" "/usr/bin/go"
 	ln -svf "/usr/lib/go-1.25/bin/gofmt" "/usr/bin/gofmt"
+	# 中国网络环境配置Go代理
 	if [ -n "$CHN_NET" ]; then
 		go env -w GOPROXY=https://goproxy.cn,direct
 	fi
 
+	# 安装GitHub CLI
 	apt install gh -y
 
+	# 清理apt缓存
 	apt clean -y
 
+	# 创建临时目录进行工具编译和安装
 	if TMP_DIR="$(mktemp -d)"; then
 		pushd "$TMP_DIR"
 	else
@@ -254,6 +331,7 @@ function install_dependencies() {
 		exit 1
 	fi
 
+	# 安装UPX压缩工具
 	UPX_REV="4.2.4"
 	curl -fLO "https://github.com/upx/upx/releases/download/v${UPX_REV}/upx-$UPX_REV-amd64_linux.tar.xz"
 	tar -Jxf "upx-$UPX_REV-amd64_linux.tar.xz"
@@ -262,38 +340,43 @@ function install_dependencies() {
 	chmod 0755 "/usr/bin/upx-ucl"
 	ln -svf "/usr/bin/upx-ucl" "/usr/bin/upx"
 
+	# 编译安装padjffs2工具（用于调整JFFS2文件系统大小）
 	curl -fLO "https://raw.githubusercontent.com/openwrt/openwrt/main/tools/padjffs2/src/padjffs2.c"
 	gcc -Wall -Werror -o "padjffs2" "padjffs2.c"
 	strip "padjffs2"
 	rm -rf "padjffs2.c" "/usr/bin/padjffs2"
 	cp -fp "padjffs2" "/usr/bin/padjffs2"
 
+	# 编译安装po2lmo工具（用于OpenWrt翻译）
 	git clone --filter=blob:none --no-checkout "https://github.com/openwrt/luci.git" "po2lmo"
 	pushd "po2lmo"
-	git config core.sparseCheckout true
+	git config core.sparseCheckout true  # 启用稀疏检出，只下载需要的文件
 	echo "modules/luci-base/src" >> ".git/info/sparse-checkout"
 	git checkout
 	cd "modules/luci-base/src"
-	make po2lmo
+	make po2lmo  # 编译po2lmo工具
 	strip "po2lmo"
 	rm -rf "/usr/bin/po2lmo"
 	cp -fp "po2lmo" "/usr/bin/po2lmo"
 	popd
 
+	# 安装固件修改工具
 	curl -fL "https://build-scripts.immortalwrt.org/modify-firmware.sh" -o "/usr/bin/modify-firmware"
 	chmod 0755 "/usr/bin/modify-firmware"
 
+	# 清理临时目录
 	popd
 	rm -rf "$TMP_DIR"
 
-	set +x
+	set +x  # 关闭命令执行显示
 	__success_msg "All dependencies have been installed."
 }
 function main() {
-	check_system
-	check_network
-	update_apt_source
-	install_dependencies
+	check_system      # 检查系统环境
+	check_network     # 检查网络连接
+	update_apt_source # 更新软件源
+	install_dependencies # 安装编译依赖
 }
 
+# 执行主函数
 main
