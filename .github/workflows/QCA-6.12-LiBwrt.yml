@@ -1,14 +1,14 @@
-#CI项目
+# CI项目 - Qualcomm Atheros平台LiBwrt编译配置
 name: QCA-6.12-LiBwrt
 
-#CI计划
+# CI计划 - 触发条件配置
 on:
-  #自动编译：当Auto-Clean运行完成后
+  # 自动编译：当Auto-Clean运行完成后（当前注释掉）
 #  workflow_run:
 #    workflows: ["Auto-Clean"]
 #    types:
 #      - completed
-  #手动编译
+  # 手动编译 - 支持手动触发编译
   workflow_dispatch:
     inputs:
       PACKAGE:
@@ -21,48 +21,37 @@ on:
         required: false
         type: boolean
 
-#CI权限
+# CI权限 - 授予工作流写入权限
 permissions: write-all
 
-#CI任务
+# CI任务定义
 jobs:
   config:
-    name: ${{matrix.CONFIG}}
+    name: ${{matrix.CONFIG}}  # 任务名称使用当前配置矩阵的CONFIG值
     strategy:
-      fail-fast: false
-      #max-parallel: 3
-      matrix:
-        CONFIG: [IPQ807X-NOWIFI, IPQ807X-WIFI,IPQ60XX-NOWIFI, IPQ60XX-WIFI]
-        SOURCE: [LiBwrt/openwrt-6.x]
-#        SOURCE: [davidtall/LiBwrt-openwrt-6.x]
-        BRANCH: [k6.12-nss]
+      fail-fast: false  # 当一个矩阵任务失败时，其他任务继续运行
+      #max-parallel: 3  # 最大并行任务数（当前注释掉）
+      matrix:  # 矩阵构建策略 - 同时构建多种配置
+        CONFIG: [IPQ807X-NOWIFI, IPQ807X-WIFI, IPQ60XX-NOWIFI, IPQ60XX-WIFI]  # 支持的设备配置：IPQ807X系列（有无WIFI）和IPQ60XX系列（有无WIFI）
+        SOURCE: [LiBwrt/openwrt-6.x]  # 源码仓库来源
+#        SOURCE: [davidtall/LiBwrt-openwrt-6.x]  # 备用源码仓库（当前注释掉）
+        BRANCH: [k6.12-nss]  # 使用k6.12-nss分支（包含网络子系统加速）
 
-    #调用公用编译核心WRT-CORE.yml
+    # 调用公用编译核心WRT-CORE.yml - 复用通用编译逻辑
     uses: ./.github/workflows/WRT-CORE.yml
     with:
-      #编译配置
-      WRT_CONFIG: ${{matrix.CONFIG}}
-      #默认主题
-      WRT_THEME: argon
-      #默认主机名
-      WRT_NAME: DAE-WRT
-      #默认WIFI名称
-      WRT_SSID: DAE-WRT
-      #默认WIFI密码
-      WRT_WORD: 12345678
-      #默认地址
-      WRT_IP: 192.168.10.1
-      #默认密码，仅作提示，修改无用
-      WRT_PW: 无
-      #源码链接
-      WRT_REPO: https://github.com/${{matrix.SOURCE}}.git
-      #源码分支
-      WRT_BRANCH: ${{matrix.BRANCH}}
-      #源码名称
-      WRT_SOURCE: ${{matrix.SOURCE}}
-      #插件调整
-      WRT_PACKAGE: ${{inputs.PACKAGE}}
-      #仅输出配置文件
-      WRT_TEST: ${{inputs.TEST}}
+      # 编译配置参数
+      WRT_CONFIG: ${{matrix.CONFIG}}  # 设备配置，来自矩阵变量
+      WRT_THEME: argon  # 默认主题设置为argon
+      WRT_NAME: DAE-WRT  # 默认主机名
+      WRT_SSID: DAE-WRT  # 默认WIFI名称
+      WRT_WORD: 12345678  # 默认WIFI密码
+      WRT_IP: 192.168.10.1  # 默认管理IP地址
+      WRT_PW: 无  # 默认密码提示（修改无用）
+      WRT_REPO: https://github.com/${{matrix.SOURCE}}.git  # 源码仓库链接
+      WRT_BRANCH: ${{matrix.BRANCH}}  # 源码分支
+      WRT_SOURCE: ${{matrix.SOURCE}}  # 源码名称
+      WRT_PACKAGE: ${{inputs.PACKAGE}}  # 手动插件调整，来自输入参数
+      WRT_TEST: ${{inputs.TEST}}  # 是否仅输出配置文件，来自输入参数
 
-      CI_NAME: ${{github.workflow}}
+      CI_NAME: ${{github.workflow}}  # CI工作流名称
