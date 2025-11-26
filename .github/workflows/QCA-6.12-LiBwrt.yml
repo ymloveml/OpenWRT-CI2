@@ -43,10 +43,10 @@ jobs:
       # 编译配置参数
       WRT_CONFIG: ${{matrix.CONFIG}}  # 设备配置，来自矩阵变量
       WRT_THEME: argon  # 默认主题设置为argon
-      WRT_NAME: DAE-WRT  # 默认主机名
-      WRT_SSID: DAE-WRT  # 默认WIFI名称
-      WRT_WORD: 12345678  # 默认WIFI密码
-      WRT_IP: 192.168.10.1  # 默认管理IP地址
+      WRT_NAME: ymlove  # 默认主机名
+      WRT_SSID: 2019  # 默认WIFI名称
+      WRT_WORD: 13410447748  # 默认WIFI密码
+      WRT_IP: 192.168.2.1  # 默认管理IP地址
       WRT_PW: 无  # 默认密码提示（修改无用）
       WRT_REPO: https://github.com/${{matrix.SOURCE}}.git  # 源码仓库链接
       WRT_BRANCH: ${{matrix.BRANCH}}  # 源码分支
@@ -55,3 +55,4 @@ jobs:
       WRT_TEST: ${{inputs.TEST}}  # 是否仅输出配置文件，来自输入参数
 
       CI_NAME: ${{github.workflow}}  # CI工作流名称
+
