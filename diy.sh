@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # 源码仓库配置 - 以下是可选的源码仓库，当前启用VIKINGYFY的immortalwrt仓库
-#WRT_REPO='https://github.com/LiBwrt/openwrt-6.x'
-#WRT_BRANCH='k6.12-nss'
+WRT_REPO='https://github.com/LiBwrt/openwrt-6.x'
+WRT_BRANCH='k6.12-nss'
 
 #WRT_REPO='https://github.com/davidtall/immortalwrt-6.12'
 #WRT_BRANCH='main'
 
-WRT_REPO='https://github.com/VIKINGYFY/immortalwrt'  # 当前使用的源码仓库
-WRT_BRANCH='main'  # 当前使用的分支
+#WRT_REPO='https://github.com/VIKINGYFY/immortalwrt'  # 当前使用的源码仓库
+#WRT_BRANCH='main'  # 当前使用的分支
 
 if [ -n "$1" ]; then
     # 如果有传递参数，赋值给WRT_TARGET
