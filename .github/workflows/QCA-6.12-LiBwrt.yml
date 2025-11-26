@@ -1,5 +1,5 @@
 # CI项目 - Qualcomm Atheros平台LiBwrt编译配置
-name: QCA-6.12-LiBwrt
+name: ymlove-6.12-LiBwrt
 
 # CI计划 - 触发条件配置
 on:
@@ -55,4 +55,5 @@ jobs:
       WRT_TEST: ${{inputs.TEST}}  # 是否仅输出配置文件，来自输入参数
 
       CI_NAME: ${{github.workflow}}  # CI工作流名称
+
 
