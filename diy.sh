@@ -60,6 +60,12 @@ fi
 echo "更新并安装feeds..."
 ./scripts/feeds update -a && ./scripts/feeds install -a
 
+# 添加iStore仓库
+echo >> feeds.conf.default
+echo 'src-git istore https://github.com/linkease/istore;main' >> feeds.conf.default
+./scripts/feeds update istore
+./scripts/feeds install -d y -p istore luci-app-store
+
 # 处理软件包
 cd package/
 $GITHUB_WORKSPACE/Scripts/Packages.sh  # 执行软件包相关脚本
